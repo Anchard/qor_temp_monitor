@@ -25,15 +25,17 @@ conn = sqlite3.connect(
     "temperaturas.db",
     detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
 )
+
 c = conn.cursor()
 
 c.execute("""
     CREATE TABLE IF NOT EXISTS temperatura (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        data DATE UNIQUE,
-        cpu_min REAL, cpu_media REAL, cpu_max REAL,
-        dsp_min REAL, dsp_media REAL, dsp_max REAL,
-        codecs_min REAL, codecs_media REAL, codecs_max REAL
+        data DATE,
+        hora TIME,
+        cpu_temp REAL,
+        dsp_temp REAL,
+        codecs_temp REAL
     )
 """)
 conn.commit()
@@ -61,51 +63,20 @@ def get_qor_status():
         return None, None, None
 
 def save_temperature(cpu_temp, dsp_temp, codecs_temp):
-    data_hoje = datetime.now().date()
-    
-    # Consultar as temperaturas já salvas para o dia atual
-    c.execute("""
-        SELECT cpu_min, cpu_media, cpu_max, dsp_min, dsp_media, dsp_max, codecs_min, codecs_media, codecs_max 
-        FROM temperatura 
-        WHERE data = ?
-    """, (data_hoje,))
-    row = c.fetchone()
+    try:
+        data_hoje = datetime.now().date()
+        hora_atual = datetime.now().time().strftime("%H:%M:%S")  # Converte para string no formato HH:MM:SS
 
-    if row:
-        # Se já existirem dados, atualize
-        cpu_min, cpu_media, cpu_max, dsp_min, dsp_media, dsp_max, codecs_min, codecs_media, codecs_max = row
-
-        def calc_media(val_antiga, nova_temp, total_vals):
-            return (val_antiga * total_vals + nova_temp) / (total_vals + 1)
-
+        # Inserindo as temperaturas no banco de dados
         c.execute("""
-            UPDATE temperatura 
-            SET 
-                cpu_min = MIN(cpu_min, ?), 
-                cpu_max = MAX(cpu_max, ?), 
-                cpu_media = ?, 
-                dsp_min = MIN(dsp_min, ?), 
-                dsp_max = MAX(dsp_max, ?), 
-                dsp_media = ?, 
-                codecs_min = MIN(codecs_min, ?), 
-                codecs_max = MAX(codecs_max, ?), 
-                codecs_media = ?
-            WHERE data = ?
-        """, (
-            cpu_temp, cpu_temp, calc_media(cpu_media, cpu_temp, 1), 
-            dsp_temp, dsp_temp, calc_media(dsp_media, dsp_temp, 1),
-            codecs_temp, codecs_temp, calc_media(codecs_media, codecs_temp, 1),
-            data_hoje
-        ))
-    
-    else:
-        # Se não houver dados para o dia, insira novos dados
-        c.execute("""
-            INSERT INTO temperatura (data, cpu_min, cpu_media, cpu_max, dsp_min, dsp_media, dsp_max, codecs_min, codecs_media, codecs_max)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (data_hoje, cpu_temp, cpu_temp, cpu_temp, dsp_temp, dsp_temp, dsp_temp, codecs_temp, codecs_temp, codecs_temp))
-    
-    conn.commit()
+            INSERT INTO temperatura (data, hora, cpu_temp, dsp_temp, codecs_temp)
+            VALUES (?, ?, ?, ?, ?)
+        """, (data_hoje, hora_atual, cpu_temp, dsp_temp, codecs_temp))
+        
+        conn.commit()
+    except Exception as e:
+        print(f"Erro ao salvar as temperaturas: {e}")
+
 
 # Configurações iniciais
 last_email_sent = None  # Variável para armazenar a hora do último envio de e-mail
@@ -144,8 +115,6 @@ def send_email(cpu_temp, dsp_temp, codecs_temp):
             print(f"Erro ao enviar email: {e}")
     else:
         print("O e-mail já foi enviado recentemente, aguardando próximo intervalo.")
-
-
 
 # Interface gráfica com tkinter
 class TempMonitorApp(tk.Tk):
@@ -187,12 +156,12 @@ class TempMonitorApp(tk.Tk):
             if cpu_temp > alert_temp or dsp_temp > alert_temp or codecs_temp > alert_temp:
                 send_email(cpu_temp, dsp_temp, codecs_temp)
 
-        # Consultar e exibir as últimas temperaturas salvas no banco de dados
-        self.db_text.delete(1.0, tk.END)  # Limpa o texto atual
-        c.execute("SELECT * FROM temperatura ORDER BY data DESC LIMIT 5")
-        rows = c.fetchall()
-        for row in rows:
-            self.db_text.insert(tk.END, f"Data: {row[1]}, CPU: {row[2]}°C / {row[3]}°C / {row[4]}°C, DSP: {row[5]}°C / {row[6]}°C / {row[7]}°C, Codecs: {row[8]}°C / {row[9]}°C / {row[10]}°C\n")
+        # # Consultar e exibir as últimas temperaturas salvas no banco de dados
+        # self.db_text.delete(1.0, tk.END)  # Limpa o texto atual
+        # c.execute("SELECT * FROM temperatura ORDER BY data DESC LIMIT 5")
+        # rows = c.fetchall()
+        # for row in rows:
+        #     self.db_text.insert(tk.END, f"Data: {row[1]}, CPU: {row[2]}°C / {row[3]}°C / {row[4]}°C, DSP: {row[5]}°C / {row[6]}°C / {row[7]}°C, Codecs: {row[8]}°C / {row[9]}°C / {row[10]}°C\n")
         
         # Atualizar a cada check_interval segundos
         self.after(check_interval * 1000, self.update_temperature_data)

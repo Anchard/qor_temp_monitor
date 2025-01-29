@@ -13,7 +13,7 @@ import matplotlib.dates as mdates
 # Configurações
 TARGET_URL = "http://192.168.3.203"
 CHECK_INTERVAL = 1  # Segundos
-ALERT_TEMP = 60  # Temperatura limite para alerta
+ALERT_TEMP = 50  # Temperatura limite para alerta
 EMAIL_RECIPIENT = "contato.tecnica.epc@mailo.com"
 EMAIL_SENDER = "contato.tecnica.epc@mailo.com"
 EMAIL_PASSWORD = "Tecnica@123"
@@ -59,6 +59,44 @@ def save_temperature(cpu_temp, dsp_temp, codecs_temp):
     """, (data_hoje, hora_atual, cpu_temp, dsp_temp, codecs_temp))
     conn.commit()
 
+# Configurações iniciais
+last_email_sent = None  # Variável para armazenar a hora do último envio de e-mail
+
+def send_email(cpu_temp, dsp_temp, codecs_temp):
+    global last_email_sent  # Usar a variável global para controlar o envio de e-mails
+
+    # Definir o intervalo mínimo entre os e-mails (por exemplo, 12 horas)
+    email_interval = 12 * 60 * 60  # 12 horas em segundos
+    current_time = datetime.now()
+
+    # Verificar se já passou o intervalo mínimo desde o último envio
+    if last_email_sent is None or (current_time - last_email_sent).total_seconds() >= email_interval:
+        try:
+            msg_content = f"""
+            ALERTA: Uma das temperaturas do QOR ultrapassou {ALERT_TEMP}°C.
+            Temperaturas registradas:
+            - CPU: {cpu_temp}°C
+            - DSP: {dsp_temp}°C
+            - Codecs: {codecs_temp}°C
+            Horário: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+            """
+            msg = MIMEText(msg_content)
+            msg["Subject"] = "ALERTA DE TEMPERATURA - QOR"
+            msg["From"] = EMAIL_SENDER
+            msg["To"] = EMAIL_RECIPIENT
+
+            with smtplib.SMTP("mail.mailo.com", 587) as server:
+                server.starttls()
+                server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                server.sendmail(EMAIL_SENDER, EMAIL_RECIPIENT, msg.as_string())
+
+            print("Email de alerta enviado!")
+            last_email_sent = current_time  # Atualizar a hora do último envio
+        except Exception as e:
+            print(f"Erro ao enviar email: {e}")
+    else:
+        print("O e-mail já foi enviado recentemente, aguardando próximo intervalo.")
+
 class TempMonitorApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -100,6 +138,9 @@ class TempMonitorApp(tk.Tk):
             self.dsp_label.config(text=f"DSP Temp: {dsp_temp} °C")
             self.codecs_label.config(text=f"Codecs Temp: {codecs_temp} °C")
             save_temperature(cpu_temp, dsp_temp, codecs_temp)
+
+            if cpu_temp > ALERT_TEMP or dsp_temp > ALERT_TEMP or codecs_temp > ALERT_TEMP:
+                send_email(cpu_temp, dsp_temp, codecs_temp)
             
             current_time = datetime.now()
             self.time_data.append(current_time)

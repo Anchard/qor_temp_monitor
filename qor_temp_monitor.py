@@ -8,15 +8,23 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import os
+from dotenv import load_dotenv
 import matplotlib.dates as mdates
 
 # Configurações
 TARGET_URL = "http://192.168.3.203"
 CHECK_INTERVAL = 1  # Segundos
-ALERT_TEMP = 50  # Temperatura limite para alerta
-EMAIL_RECIPIENT = "contato.tecnica.epc@mailo.com"
-EMAIL_SENDER = "contato.tecnica.epc@mailo.com"
-EMAIL_PASSWORD = "Tecnica@123"
+ALERT_TEMP = 60  # Temperatura limite para alerta
+
+# Carregar as variáveis do arquivo .env
+load_dotenv()
+
+EMAIL_RECIPIENT = os.getenv("EMAIL_RECIPIENT")
+EMAIL_SENDER = os.getenv("EMAIL_SENDER")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+print(EMAIL_PASSWORD)
+print(EMAIL_SENDER)
 
 # Banco de dados
 conn = sqlite3.connect("temperaturas.db")
